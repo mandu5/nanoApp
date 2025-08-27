@@ -24,16 +24,11 @@ gcloud artifacts repositories create "${REPO}" \
   --location="${REGION}" \
   --description="AI Photo Editor images" || true
 
-echo "Building images locally with docker-compose..."
-docker compose build
+echo "Building backend image..."
+docker build -t "${BACKEND_IMAGE}" ./backend
 
-echo "Tagging images..."
-docker tag ai-photo-editor-backend:latest "${BACKEND_IMAGE}" || docker tag ai-photo-editor-backend "${BACKEND_IMAGE}" || true
-docker tag ai-photo-editor-frontend:latest "${FRONTEND_IMAGE}" || docker tag ai-photo-editor-frontend "${FRONTEND_IMAGE}" || true
-
-echo "Pushing images..."
+echo "Pushing backend image..."
 docker push "${BACKEND_IMAGE}"
-docker push "${FRONTEND_IMAGE}"
 
 echo "Deploying Backend to Cloud Run..."
 gcloud run deploy "${SERVICE_BACKEND}" \
@@ -44,6 +39,12 @@ gcloud run deploy "${SERVICE_BACKEND}" \
 
 BACKEND_URL=$(gcloud run services describe "${SERVICE_BACKEND}" --format='value(status.url)')
 
+echo "Building frontend image with backend URL: ${BACKEND_URL}..."
+docker build --build-arg REACT_APP_BACKEND_URL="${BACKEND_URL}" -t "${FRONTEND_IMAGE}" ./frontend
+
+echo "Pushing frontend image..."
+docker push "${FRONTEND_IMAGE}"
+
 echo "Deploying Frontend to Cloud Run..."
 gcloud run deploy "${SERVICE_FRONTEND}" \
   --image "${FRONTEND_IMAGE}" \
@@ -51,6 +52,10 @@ gcloud run deploy "${SERVICE_FRONTEND}" \
   --port 80
 
 FRONTEND_URL=$(gcloud run services describe "${SERVICE_FRONTEND}" --format='value(status.url)')
+
+echo "Updating Backend CORS origin to Frontend URL..."
+gcloud run services update "${SERVICE_BACKEND}" \
+  --update-env-vars FRONTEND_ORIGIN="${FRONTEND_URL}"
 
 echo "Deployment complete. URLs:"
 echo "Backend: ${BACKEND_URL}"
