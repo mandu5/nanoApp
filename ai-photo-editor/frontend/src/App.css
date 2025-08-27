@@ -1,0 +1,4 @@
+/* Minimal base to play nice with Tailwind */
+html, body, #root {
+  height: 100%;
+}
